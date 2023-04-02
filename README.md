@@ -1,2 +1,1 @@
-# nlp-ood-detection
-Outlier Detection for NLP using Latent Representations
+# Outlier Detection for NLP using Latent Representations
