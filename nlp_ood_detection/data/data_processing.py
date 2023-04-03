@@ -15,14 +15,17 @@ class DataPreprocessing(object):
         for dataset in self.dataset_list:
             self.datasets[dataset] = self.__load_data(dataset)
 
-    def __preprocess(self, dataset: dict[str, Dataset]):
+    def __preprocess(self, dataset: dict[str, Dataset]) -> Dataset:
         print('Dataset preprocessing...')
+
         for split in dataset.keys():
             dataset[split] = dataset[split].map(lambda x: self.tokenizer(
-                x['text'], truncation=True, padding='max_length'), batched=True)
+                x['text'], truncation=True, padding='max_length', return_tensors='pt'), batched=True)
+            dataset[split].set_format(type='torch', columns=[
+                                      'input_ids', 'attention_mask', 'label'])
         return dataset
 
-    def __load_data(self, dataset: str):
+    def __load_data(self, dataset: str) -> Dataset:
         print(f'Loading {dataset} dataset...')
         dataset = load_dataset(dataset)
 
