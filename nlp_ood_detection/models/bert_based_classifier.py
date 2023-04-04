@@ -1,13 +1,15 @@
-from datetime import datetime
-from typing import Dict, List
 import torch
+import argparse
+import pytorch_lightning as pl
+from datetime import datetime
+from typing import Dict
 from torch.nn import Module, Dropout, ReLU, Linear, CrossEntropyLoss
 from torch.utils.data import DataLoader
-import argparse
+from torch.nn.functional import softmax, sum
 from transformers import AutoTokenizer, AutoConfig, PreTrainedTokenizer, AutoModelForSequenceClassification
+from nlp_ood_detection.data.bert_datamodule import BertBasedDataModule
 from nlp_ood_detection.data.data_processing import DataPreprocessing
 from datasets import Dataset
-import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 
 
@@ -75,7 +77,7 @@ class BertBasedClassifier(pl.LightningModule):
         loss_fn = CrossEntropyLoss()
         loss = loss_fn(predict, labels)
 
-        prediction = torch.softmax(predict, dim=1).argmax(dim=1)
+        prediction = softmax(predict, dim=1).argmax(dim=1)
         m = {}
         m["tp"] = ((prediction == 1) & (labels == 1)).float().sum()
         m["fp"] = ((prediction == 1) & (labels == 0)).float().sum()
@@ -91,7 +93,7 @@ class BertBasedClassifier(pl.LightningModule):
                 },
                 on_step=False,
                 on_epoch=True,
-                reduce_fx=torch.sum
+                reduce_fx=sum
             )
 
         return loss
@@ -104,41 +106,6 @@ class BertBasedClassifier(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         return self.calculate_loss(batch, "test")
-
-
-class BertBasedDataModule(pl.LightningDataModule):
-    def __init__(self,
-                 tokenizer: PreTrainedTokenizer,
-                 dataset_name: str = 'imdb',
-                 batch_size: int = 64,
-                 num_workers: int = 1,
-                 **kwargs
-                 ) -> None:
-        super(BertBasedDataModule, self).__init__()
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.tokenizer = tokenizer
-        self.dataset_name = dataset_name
-
-    def setup(self, stage=None):
-        self.datasets = DataPreprocessing(
-            tokenizer=self.tokenizer, dataset_list=[self.dataset_name])
-
-        self.train = self.datasets[self.dataset_name]['train']
-        self.test = self.datasets[self.dataset_name]['test']
-        self.val = self.datasets[self.dataset_name]['val']
-
-    def _dataloader(self, dataset: Dataset, shuffle: bool = False):
-        return DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=shuffle)
-
-    def train_dataloader(self):
-        return self._dataloader(self.train, shuffle=True)
-
-    def val_dataloader(self):
-        return self._dataloader(self.val)
-
-    def test_dataloader(self):
-        return self._dataloader(self.test)
 
 
 if __name__ == '__main__':

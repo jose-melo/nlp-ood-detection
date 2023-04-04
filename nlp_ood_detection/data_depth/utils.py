@@ -1,29 +1,38 @@
-import argparse
 from typing import Tuple
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 from numpy import ndarray
 from sklearn.datasets import load_iris
+
 from nlp_ood_detection.data_depth.similarity_scorer import IRW, EnergyBased, Mahalanobis, MSP
 
 
-def load_data() -> Tuple[ndarray, ndarray, ndarray, ndarray]:
+def load_data(x_min: float = 0, 
+              x_max: float = 8,
+              y_min: float = 0,
+              y_max: float = 3,
+              grid_size: int = 5,
+              ) -> Tuple[ndarray, ndarray, ndarray, ndarray, ndarray]:
+
     """Load Iris dataset
 
     Returns:
         _type_: _description_
     """
     iris_data = load_iris()
-    data_df = pd.DataFrame(
+    df = pd.DataFrame(
         iris_data['data'], columns=iris_data['feature_names'])
-    x_train = data_df[["petal length (cm)",  "petal width (cm)"]].to_numpy()
+    df['target'] = iris_data['target']
+    x_train = df[["petal length (cm)",  "petal width (cm)"]][df['target'] <= 1]
+    x_train = x_train.to_numpy()
+    y_train = df['target'][df['target'] <= 1].to_numpy()
+    
 
-    x = np.linspace(0, 8, 5)
-    y = np.linspace(0, 3, 5)
+    x = np.linspace(x_min, x_max, grid_size)
+    y = np.linspace(y_min, y_max, grid_size)
     xx, yy = np.meshgrid(x, y)
     x_grid = np.c_[xx.ravel(), yy.ravel()]
-    return x_train, x_grid, xx, yy
+    return x_train, y_train, x_grid, xx, yy
 
 
 def get_method(method: str, **kwargs) -> IRW:
@@ -35,5 +44,7 @@ def get_method(method: str, **kwargs) -> IRW:
     """
     if method == 'irw':
         return IRW(**kwargs)
+    if method == 'energy':
+        return EnergyBased(**kwargs)
     else:
         raise NotImplementedError(f'Method {method} not implemented yet!')

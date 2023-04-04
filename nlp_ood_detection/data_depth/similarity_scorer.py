@@ -1,11 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Union, Optional
+from typing import Dict, NotRequired, Union, Optional, TypedDict
 from numpy import ndarray
 import torch
 from torch import Tensor
 from torch.nn import Module
 from torch.nn.functional import softmax
 import numpy as np
+
+
+class ScorerInput(TypedDict):
+    """ TypedDict for the input of the similarity scorer classes"""
+    x_test: ndarray
+    y_test: NotRequired[ndarray]
+    x_train: NotRequired[ndarray]
+    y_train: NotRequired[ndarray]
 
 
 class SimilarityScorerBase(ABC):
@@ -21,9 +29,9 @@ class SimilarityScorerBase(ABC):
         self.x_test = None
 
     @abstractmethod
-    def score(self, x: Union[Dict[str, Tensor], ndarray]) -> ndarray:
+    def score(self, x: ScorerInput) -> ndarray:
         """Calculate the similarity score
-            :params: X (Tensor): input value
+            :params: X (ScorerInput): input value
             :return: ndarray: the similarity score
         """
 
@@ -37,7 +45,7 @@ class Mahalanobis(SimilarityScorerBase):
                  **kwargs) -> None:
         super(Mahalanobis, self).__init__(data_train, model)
 
-    def score(self, x: Union[Dict[str, Tensor], ndarray]) -> ndarray:
+    def score(self, x: ScorerInput) -> ndarray:
         self.x_test = x - np.mean(self.data_train, axis=0)
         cov = np.cov(self.data_train, rowvar=False)
         inv_cov = np.linalg.inv(cov)
@@ -56,7 +64,7 @@ class MSP(SimilarityScorerBase):
                  **kwargs) -> None:
         super(MSP, self).__init__(data_train, model)
 
-    def score(self, x: Union[Dict[str, Tensor], ndarray]) -> ndarray:
+    def score(self, x: ScorerInput) -> ndarray:
         self.x_test = x
 
         with torch.no_grad():
@@ -73,21 +81,22 @@ class EnergyBased(SimilarityScorerBase):
     def __init__(self,
                  data_train: ndarray,
                  model: Optional[Module] = None,
-                 temperature: float = 1,
+                 T: float = 1,
+                 use_logits: bool = False,
                  **kwargs) -> None:
         super(EnergyBased, self).__init__(data_train, model)
-        self.temperature = temperature
+
+        self.T = T
+        self.use_logits = use_logits
 
     def __lse(self, x: ndarray) -> ndarray:
         """ Implementation of the log-sum-exp function"""
-        return -self.temperature*np.log(np.sum(np.exp(x)))
+        return -self.T*np.log(np.sum(np.exp(x/self.T), axis=1))
 
-    def score(self, x: Union[Dict[str, Tensor], ndarray]) -> ndarray:
-        self.x_test = x
-
+    def score(self, x: ScorerInput) -> ndarray:
         with torch.no_grad():
-            logits = self.model(**self.x_test).cpu().numpy()
-            prediction = softmax(logits, dim=1).argmax(dim=1)
+            logits = self.model(**x).cpu()
+            prediction = softmax(logits, dim=1).numpy()
             energy = self.__lse(prediction)
 
         return energy
@@ -112,8 +121,8 @@ class IRW(SimilarityScorerBase):
         u /= np.linalg.norm(u, axis=0)
         return u
 
-    def score(self, x: Union[Tensor, ndarray]) -> ndarray:
-        self.x_test = x
+    def score(self, x: ScorerInput) -> ndarray:
+        self.x_test = x['x_test']
 
         # Sample from the unitr sphere (Let's Monte Carlo it)
         sampled_points = self.__sample_sphere()
