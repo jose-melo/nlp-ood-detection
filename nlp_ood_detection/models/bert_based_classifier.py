@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 import torch
 from torch.nn import Module, Dropout, ReLU, Linear, CrossEntropyLoss
 from torch.utils.data import DataLoader
@@ -67,7 +67,7 @@ class BertBasedClassifier(pl.LightningModule):
             'lr': self.lr_schedulers().get_last_lr()[0],
             'epoch': self.current_epoch})
 
-    def calculate_loss(self, batch, mode):
+    def calculate_loss(self, batch: Dict[str, torch.Tensor], mode):
         batch = {key: value.to(self.device) for key, value in batch.items()}
 
         labels = batch['label']

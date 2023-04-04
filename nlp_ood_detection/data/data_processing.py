@@ -1,5 +1,5 @@
-from typing import List
 import numpy as np
+from typing import List
 from sklearn.model_selection import train_test_split
 from transformers import PreTrainedTokenizer
 from datasets import Dataset, load_dataset
