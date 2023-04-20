@@ -3,7 +3,7 @@ from datasets import Dataset
 from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizer
 
-from nlp_ood_detection.data.data_processing import DataPreprocessing
+from nlp_ood_detection.data_processing.data_processing import DataPreprocessing
 
 
 class BertBasedDataModule(pl.LightningDataModule):

@@ -5,6 +5,11 @@ from transformers import PreTrainedTokenizer
 
 
 class DataPreprocessing:
+    dataset2key = {
+        "imdb": "text",
+        "sst2": "sentence",
+    }
+
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer,
@@ -17,13 +22,13 @@ class DataPreprocessing:
         for dataset in self.dataset_list:
             self.datasets[dataset] = self.__load_data(dataset)
 
-    def __preprocess(self, dataset: dict[str, Dataset]) -> Dataset:
+    def __preprocess(self, dataset: dict[str, Dataset], dataset_name: str) -> Dataset:
         print("Dataset preprocessing...")
 
         for split in dataset.keys():
             dataset[split] = dataset[split].map(
                 lambda x: self.tokenizer(
-                    x["text"],
+                    x[DataPreprocessing.dataset2key[dataset_name]],
                     truncation=True,
                     padding="max_length",
                     return_tensors="pt",
@@ -36,9 +41,9 @@ class DataPreprocessing:
             )
         return dataset
 
-    def __load_data(self, dataset: str) -> Dataset:
-        print(f"Loading {dataset} dataset...")
-        dataset = load_dataset(dataset)
+    def __load_data(self, dataset_name: str) -> Dataset:
+        print(f"Loading {dataset_name} dataset...")
+        dataset = load_dataset(dataset_name)
 
         split_train_val = np.arange(len(dataset["train"]))
         generator = np.random.default_rng()
@@ -54,7 +59,7 @@ class DataPreprocessing:
             "val": dataset["train"].select(val_split),
             "test": dataset["test"],
         }
-        dataset = self.__preprocess(dataset)
+        dataset = self.__preprocess(dataset, dataset_name)
 
         return dataset
 

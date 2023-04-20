@@ -4,15 +4,15 @@ from datetime import datetime
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from torch.nn import CrossEntropyLoss, Dropout, Linear, ReLU
 from torch import softmax, sum
+from torch.nn import CrossEntropyLoss, Dropout, Linear, ReLU
 from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
 )
 
-from nlp_ood_detection.data.bert_datamodule import BertBasedDataModule
+from nlp_ood_detection.data_processing.bert_datamodule import BertBasedDataModule
 
 
 class BertBasedClassifier(pl.LightningModule):
@@ -59,18 +59,15 @@ class BertBasedClassifier(pl.LightningModule):
         return x
 
     def configure_optimizers(self):
-        adamw = torch.optim.AdamW(
-            self.parameters(), self.lr, weight_decay=1e-3)
+        adamw = torch.optim.AdamW(self.parameters(), self.lr, weight_decay=1e-3)
 
-        lr_decay = torch.optim.lr_scheduler.CosineAnnealingLR(
-            adamw, self.max_epochs)
+        lr_decay = torch.optim.lr_scheduler.CosineAnnealingLR(adamw, self.max_epochs)
 
         return [adamw], [lr_decay]
 
     def on_train_epoch_end(self):
         self.log_dict(
-            {"lr": self.lr_schedulers().get_last_lr()[
-                0], "epoch": self.current_epoch},
+            {"lr": self.lr_schedulers().get_last_lr()[0], "epoch": self.current_epoch},
         )
 
     def calculate_loss(self, batch: dict[str, torch.Tensor], mode):
@@ -163,5 +160,4 @@ if __name__ == "__main__":
 
     trainer.fit(model, dataloader)
 
-    trainer.save_checkpoint(
-        f'ckpt_save_{datetime.now().strftime("%Y%m%d%H%M%S")}.ckpt')
+    trainer.save_checkpoint(f'ckpt_save_{datetime.now().strftime("%Y%m%d%H%M%S")}.ckpt')

@@ -8,6 +8,7 @@ lightning_logs/
 testing.ipynb
 testing.py
 .mypy.ini
+data/
 
 # C extensions
 *.so
