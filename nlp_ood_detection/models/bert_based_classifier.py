@@ -1,29 +1,31 @@
-import torch
 import argparse
-import pytorch_lightning as pl
 from datetime import datetime
-from typing import Dict
-from torch.nn import Module, Dropout, ReLU, Linear, CrossEntropyLoss
-from torch.utils.data import DataLoader
-from torch.nn.functional import softmax, sum
-from transformers import AutoTokenizer, AutoConfig, PreTrainedTokenizer, AutoModelForSequenceClassification
-from nlp_ood_detection.data.bert_datamodule import BertBasedDataModule
-from nlp_ood_detection.data.data_processing import DataPreprocessing
-from datasets import Dataset
+
+import pytorch_lightning as pl
+import torch
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from torch.nn import CrossEntropyLoss, Dropout, Linear, ReLU
+from torch.nn.functional import softmax, sum
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+)
+
+from nlp_ood_detection.data.bert_datamodule import BertBasedDataModule
 
 
 class BertBasedClassifier(pl.LightningModule):
-
-    def __init__(self,
-                 model_name: str = 'distilbert-base-cased',
-                 config: AutoConfig = None,
-                 max_epochs: int = 10,
-                 lr: float = 1e-5,
-                 num_labels: int = 2,
-                 **kwargs
-                 ):
-        super(BertBasedClassifier, self).__init__()
+    def __init__(
+        self,
+        model_name: str = "distilbert-base-cased",
+        config: AutoConfig = None,
+        max_epochs: int = 10,
+        lr: float = 1e-5,
+        num_labels: int = 2,
+        **kwargs,
+    ):
+        super().__init__()
         self.save_hyperparameters()
         self.max_epochs = max_epochs
         self.lr = lr
@@ -31,48 +33,47 @@ class BertBasedClassifier(pl.LightningModule):
         self.num_labels = num_labels
 
         self.bert = AutoModelForSequenceClassification.from_pretrained(
-            model_name, config=self.config)
+            model_name,
+            config=self.config,
+        )
 
-        print('config: ', self.config)
+        print("config: ", self.config)
         self.dropout = Dropout(0.1)
-        self.linear1 = Linear(self.config.hidden_size,
-                              self.config.hidden_size)
+        self.linear1 = Linear(self.config.hidden_size, self.config.hidden_size)
         self.relu = ReLU()
-        self.linear2 = Linear(self.config.hidden_size,
-                              self.num_labels)
+        self.linear2 = Linear(self.config.hidden_size, self.num_labels)
 
-    def forward(self,
-                input_ids: torch.Tensor = None,
-                attention_mask: torch.Tensor = None,
-                label: torch.Tensor = None):
-
+    def forward(
+        self,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        label: torch.Tensor = None,
+    ):
         x = self.bert(input_ids, attention_mask, output_hidden_states=True)
 
         # TODO: check if this is correct
-        x = self.dropout(x['hidden_states'][-1][:, -1, :])
+        x = self.dropout(x["hidden_states"][-1][:, -1, :])
         x = self.linear1(x)
         x = self.relu(x)
         x = self.linear2(x)
         return x
 
     def configure_optimizers(self):
-        adamw = torch.optim.AdamW(
-            self.parameters(), self.lr, weight_decay=1e-3)
+        adamw = torch.optim.AdamW(self.parameters(), self.lr, weight_decay=1e-3)
 
-        lr_decay = torch.optim.lr_scheduler.CosineAnnealingLR(
-            adamw, self.max_epochs)
+        lr_decay = torch.optim.lr_scheduler.CosineAnnealingLR(adamw, self.max_epochs)
 
         return [adamw], [lr_decay]
 
     def on_train_epoch_end(self):
-        self.log_dict({
-            'lr': self.lr_schedulers().get_last_lr()[0],
-            'epoch': self.current_epoch})
+        self.log_dict(
+            {"lr": self.lr_schedulers().get_last_lr()[0], "epoch": self.current_epoch},
+        )
 
-    def calculate_loss(self, batch: Dict[str, torch.Tensor], mode):
+    def calculate_loss(self, batch: dict[str, torch.Tensor], mode):
         batch = {key: value.to(self.device) for key, value in batch.items()}
 
-        labels = batch['label']
+        labels = batch["label"]
         predict = self.forward(**batch)
         loss_fn = CrossEntropyLoss()
         loss = loss_fn(predict, labels)
@@ -93,7 +94,7 @@ class BertBasedClassifier(pl.LightningModule):
                 },
                 on_step=False,
                 on_epoch=True,
-                reduce_fx=sum
+                reduce_fx=sum,
             )
 
         return loss
@@ -108,14 +109,21 @@ class BertBasedClassifier(pl.LightningModule):
         return self.calculate_loss(batch, "test")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run a script")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        help="The script to run",
+        default=["imdb"],
+    )
 
-    parser = argparse.ArgumentParser(description='Run a script')
-    parser.add_argument('--datasets', nargs='+', help='The script to run',
-                        default=['imdb'])
-
-    parser.add_argument('--model_name', help='The model to use',
-                        default='distilbert-base-cased', type=str)
+    parser.add_argument(
+        "--model_name",
+        help="The model to use",
+        default="distilbert-base-cased",
+        type=str,
+    )
 
     args, _ = parser.parse_known_args()
 
@@ -134,23 +142,22 @@ if __name__ == '__main__':
         "num_workers": 0,
         "tokenizer": tokenizer,
         "dataset_name": "imdb",
-        "num_labels": 2
+        "num_labels": 2,
     }
 
     dataloader = BertBasedDataModule(**params)
 
     model = BertBasedClassifier(**params)
 
-    callback = ModelCheckpoint(monitor=r'val_loss', mode='min')
+    callback = ModelCheckpoint(monitor=r"val_loss", mode="min")
     trainer = pl.Trainer(
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
         max_epochs=params["max_epochs"],
         log_every_n_steps=1,
-        callbacks=[callback]
+        callbacks=[callback],
     )
 
     trainer.fit(model, dataloader)
 
-    trainer.save_checkpoint(
-        f'ckpt_save_{datetime.now().strftime("%Y%m%d%H%M%S")}.ckpt')
+    trainer.save_checkpoint(f'ckpt_save_{datetime.now().strftime("%Y%m%d%H%M%S")}.ckpt')

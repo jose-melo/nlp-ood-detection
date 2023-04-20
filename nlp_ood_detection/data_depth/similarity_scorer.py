@@ -1,53 +1,63 @@
 from abc import ABC, abstractmethod
-from typing import Dict, NotRequired, Union, Optional, TypedDict
-from numpy import ndarray
+from typing import TypedDict
+
+import numpy as np
+import pandas as pd
 import torch
-from torch import Tensor
+from numpy import ndarray
 from torch.nn import Module
 from torch.nn.functional import softmax
-import numpy as np
 
 
 class ScorerInput(TypedDict):
-    """ TypedDict for the input of the similarity scorer classes"""
+    """TypedDict for the input of the similarity scorer classes"""
+
     x_test: ndarray
-    y_test: NotRequired[ndarray]
-    x_train: NotRequired[ndarray]
-    y_train: NotRequired[ndarray]
+    # x_train: NotRequired[ndarray]
+    # y_train: NotRequired[ndarray]
 
 
 class SimilarityScorerBase(ABC):
-    """ Base class for similarity scorers"""
+    """Base class for similarity scorers"""
 
-    def __init__(self,
-                 data_train: ndarray,
-                 model: Optional[Module] = None,
-                 **kwargs) -> None:
-        super(SimilarityScorerBase, self).__init__()
-        self.data_train = data_train
+    def __init__(
+        self,
+        x_train: ndarray,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        features: ndarray | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__()
+        self.x_train = x_train
         self.model = model
+        self.y_train = y_train
         self.x_test = None
+        self.features = features
 
     @abstractmethod
     def score(self, x: ScorerInput) -> ndarray:
         """Calculate the similarity score
-            :params: X (ScorerInput): input value
-            :return: ndarray: the similarity score
+        :params: X (ScorerInput): input value
+        :return: ndarray: the similarity score
         """
 
 
 class Mahalanobis(SimilarityScorerBase):
-    """ Mahalanobis distance based similarity scorer"""
+    """Mahalanobis distance based similarity scorer"""
 
-    def __init__(self,
-                 data_train: ndarray,
-                 model: Optional[Module] = None,
-                 **kwargs) -> None:
-        super(Mahalanobis, self).__init__(data_train, model)
+    def __init__(
+        self,
+        x_train: ndarray,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(x_train, model)
 
     def score(self, x: ScorerInput) -> ndarray:
-        self.x_test = x - np.mean(self.data_train, axis=0)
-        cov = np.cov(self.data_train, rowvar=False)
+        self.x_test = x - np.mean(self.x_train, axis=0)
+        cov = np.cov(self.x_train, rowvar=False)
         inv_cov = np.linalg.inv(cov)
         mahalanobis = np.dot(self.x_test, inv_cov)
         mahalanobis = np.dot(mahalanobis, self.x_test.T)
@@ -58,11 +68,14 @@ class Mahalanobis(SimilarityScorerBase):
 class MSP(SimilarityScorerBase):
     """Implementation of the Maximum similarity probability (MSP) measure"""
 
-    def __init__(self,
-                 data_train: ndarray,
-                 model: Optional[Module] = None,
-                 **kwargs) -> None:
-        super(MSP, self).__init__(data_train, model)
+    def __init__(
+        self,
+        x_train: ndarray,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(x_train, model)
 
     def score(self, x: ScorerInput) -> ndarray:
         self.x_test = x
@@ -78,24 +91,27 @@ class MSP(SimilarityScorerBase):
 class EnergyBased(SimilarityScorerBase):
     """Implementation of the Energy-based measure"""
 
-    def __init__(self,
-                 data_train: ndarray,
-                 model: Optional[Module] = None,
-                 T: float = 1,
-                 use_logits: bool = False,
-                 **kwargs) -> None:
-        super(EnergyBased, self).__init__(data_train, model)
+    def __init__(
+        self,
+        x_train: ndarray,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        temperature: float = 1,
+        use_logits: bool = False,
+        **kwargs,
+    ) -> None:
+        super().__init__(x_train, y_train, model)
 
-        self.T = T
+        self.T = temperature
         self.use_logits = use_logits
 
     def __lse(self, x: ndarray) -> ndarray:
-        """ Implementation of the log-sum-exp function"""
-        return -self.T*np.log(np.sum(np.exp(x/self.T), axis=1))
+        """Implementation of the log-sum-exp function"""
+        return -self.T * np.log(np.sum(np.exp(x / self.T), axis=1))
 
     def score(self, x: ScorerInput) -> ndarray:
         with torch.no_grad():
-            logits = self.model(**x).cpu()
+            logits = self.model(self.x_train, self.y_train, **x).cpu()
             prediction = softmax(logits, dim=1).numpy()
             energy = self.__lse(prediction)
 
@@ -105,51 +121,69 @@ class EnergyBased(SimilarityScorerBase):
 class IRW(SimilarityScorerBase):
     """Implementation of the Integrated ranked-weigthed (IRW) measure"""
 
-    def __init__(self,
-                 data_train: ndarray,
-                 model: Optional[Module] = None,
-                 num_dim: int = 2,
-                 num_samples: int = 1000,
-                 **kwargs):
-        super(IRW, self).__init__(data_train, model)
+    def __init__(
+        self,
+        x_train: ndarray,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        num_dim: int = 2,
+        num_samples: int = 1000,
+        feature: list | None = [0, 1],
+        **kwargs,
+    ):
+        super().__init__(x_train, y_train, model, feature)
         self.num_dim = num_dim
         self.num_samples = num_samples
+        self.feature = feature
 
     def __sample_sphere(self):
         """Sample from the unit sphere"""
-        u = np.random.randn(self.num_dim, self.num_samples)
+        generator = np.random.Generator(np.random.PCG64())
+        u = generator.integers(self.num_dim, self.num_samples)
         u /= np.linalg.norm(u, axis=0)
         return u
 
-    def score(self, x: ScorerInput) -> ndarray:
-        self.x_test = x['x_test']
+    def score(self, x: ndarray) -> ndarray:
+        df_test = pd.DataFrame(x)
+        with torch.no_grad():
+            logits = self.model(self.x_train, self.y_train, x).cpu()
+            prediction = softmax(logits, dim=1).argmax(axis=1).numpy()
+        df_test["label"] = prediction
 
-        # Sample from the unitr sphere (Let's Monte Carlo it)
-        sampled_points = self.__sample_sphere()
+        df_train = pd.DataFrame(self.x_train)
+        df_train["label"] = self.y_train
 
-        ranking = np.zeros((self.x_test.shape[0], self.num_samples))
+        labels = df_test["label"].unique()
+        df_test["d_irw"] = np.zeros(df_test.shape[0])
+        print(df_test)
+        for label in labels:
+            x_test = df_test[self.feature][df_test["label"] == label].values
+            x_train = df_train[self.feature][df_train["label"] == label].values
 
-        # Projection of the train data on the sampled points  from the unit sphere
-        data_train_proj = self.data_train @ sampled_points
+            print(x_test.shape, x_train.shape)
 
-        # Projection of the test data on the sampled points  from the unit sphere
-        x_test_proj = self.x_test @ sampled_points
+            sampled_points = self.__sample_sphere()
 
-        # Calculate the ranking of the test data
-        data_train_proj.sort(axis=0)
-        for i in range(self.x_test.shape[0]):
-            for j in range(self.num_samples):
-                ranking[i, j] = np.argmin(
-                    abs(data_train_proj[:, j] - x_test_proj[i, j]))
+            ranking = np.zeros((x_test.shape[0], self.num_samples))
 
-        # Normalize the ranking
-        d_irw = ranking / len(self.data_train)
+            x_train_proj = x_train @ sampled_points
 
-        # ID measure
-        for i, point in enumerate(d_irw):
-            for j, sample in enumerate(point):
-                d_irw[i, j] = min(sample, 1 - sample)
+            x_test_proj = x_test @ sampled_points
 
-        d_irw = np.mean(d_irw, axis=1)
+            x_train_proj.sort(axis=0)
+            for i in range(x_test.shape[0]):
+                for j in range(self.num_samples):
+                    ranking[i, j] = np.argmin(
+                        abs(x_train_proj[:, j] - x_test_proj[i, j]),
+                    )
 
-        return d_irw
+            d_irw = ranking / len(self.x_train)
+
+            for i, point in enumerate(d_irw):
+                for j, sample in enumerate(point):
+                    d_irw[i, j] = min(sample, 1 - sample)
+
+            d_irw = np.mean(d_irw, axis=1)
+            df_test["d_irw"][df_test["label"] == label] = d_irw
+
+        return df_test["d_irw"].values

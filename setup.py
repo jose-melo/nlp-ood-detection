@@ -1,3 +1,3 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
-setup(name='nlp_ood_detection', version='1.0', packages=['nlp_ood_detection'])
+setup(name="nlp_ood_detection", version="1.0", packages=["nlp_ood_detection"])
