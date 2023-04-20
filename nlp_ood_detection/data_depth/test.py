@@ -35,12 +35,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Test the similarity measures")
 
+    parser.add_argument(
+        r"--run_all", help=r"Run all methods", action="store_true")
     parser.add_argument(r"--grid_size", help=r"Grid size",
                         default=100, type=int)
     method_parser = parser.add_subparsers(
         dest=r"method",
         help="Chosen method",
-        required=True,
     )
 
     # Parse the arguments for the mahalanobis method
@@ -77,6 +78,24 @@ def main():
     args, _ = parser.parse_known_args()
     args = vars(args)
 
+    if args["run_all"]:
+        run_all_methods(args)
+    else:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+        run_method(args, ax)
+        plt.show()
+
+
+def run_all_methods(args):
+    all_methods = ["maha", "msp", "energy", "irw"]
+    fig, ax = plt.subplots(2, 2, figsize=(10, 10))
+    for idx, method in enumerate(all_methods):
+        args["method"] = method
+        run_method(args, ax[idx % 2][idx // 2])
+    plt.show()
+
+
+def run_method(args, ax=plt.Axes):
     x_train, y_train, x_grid, xx, yy = load_data(grid_size=args["grid_size"])
 
     args = {
@@ -93,8 +112,8 @@ def main():
 
     score = scorer.score(x_grid)
 
-    plt.contourf(xx, yy, score.reshape(xx.shape), levels=20, cmap="viridis")
-    plt.scatter(
+    ax.contourf(xx, yy, score.reshape(xx.shape), levels=20, cmap="viridis")
+    ax.scatter(
         x_train[:, 0],
         x_train[:, 1],
         label="Train data",
@@ -102,11 +121,10 @@ def main():
         c="r",
         s=50,
     )
-    plt.colorbar()
-    plt.title(args["method"])
-    plt.xlabel("Petal length")
-    plt.ylabel("Petal width")
-    plt.show()
+    ax.set_title(args["method"])
+    ax.set_xlabel("Petal length")
+    ax.set_ylabel("Petal width")
+    ax.figure.colorbar(ax.collections[0], ax=ax)
 
 
 if __name__ == "__main__":

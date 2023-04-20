@@ -70,9 +70,9 @@ class Mahalanobis(SimilarityScorerBase):
 
         labels = df_test["label"].unique()
         for label in labels:
-            x_test = df_test[self.feature][df_test["label"] == label].values
-            x_train = df_train[self.feature][df_train["label"]
-                                             == label].values
+            x_test = df_test[
+                self.feature][df_test["label"] == label].values
+            x_train = df_train[self.feature][df_train["label"] == label].values
 
             x_test = x_test - np.mean(x_train, axis=0)
 
@@ -84,7 +84,8 @@ class Mahalanobis(SimilarityScorerBase):
             mahalanobis = np.dot(mahalanobis, x_test.T)
             mahalanobis = np.diag(mahalanobis)
 
-            df_test["maha"][df_test["label"] == label] = mahalanobis
+            # Solve pandas error when assigning values to a slice
+            df_test.loc[df_test["label"] == label, "maha"] = mahalanobis
 
         return df_test["maha"].values
 
@@ -99,12 +100,15 @@ class MSP(SimilarityScorerBase):
         model: Module | None = None,
         **kwargs,
     ) -> None:
-        super().__init__(x_train, model)
+        super().__init__(x_train, y_train, model)
 
+    def score(self, x: ScorerInput) -> ndarray:
+        self.x_test = x
         with torch.no_grad():
-            logits = self.model(**self.x_test).cpu().numpy()
+            logits = self.model(self.x_train, self.y_train,
+                                self.x_test).cpu()
             prediction = softmax(logits, dim=1).argmax(dim=1)
-            msp = 1 - np.maximum(prediction)
+            msp = 1 - prediction.numpy()
 
         return msp
 
@@ -176,12 +180,9 @@ class IRW(SimilarityScorerBase):
 
         labels = df_test["label"].unique()
         df_test["d_irw"] = np.zeros(df_test.shape[0])
-        print(df_test)
         for label in labels:
             x_test = df_test[self.feature][df_test["label"] == label].values
             x_train = df_train[self.feature][df_train["label"] == label].values
-
-            print(x_test.shape, x_train.shape)
 
             sampled_points = self.__sample_sphere()
 
@@ -205,6 +206,6 @@ class IRW(SimilarityScorerBase):
                     d_irw[i, j] = min(sample, 1 - sample)
 
             d_irw = np.mean(d_irw, axis=1)
-            df_test["d_irw"][df_test["label"] == label] = d_irw
+            df_test.loc[df_test["label"] == label, "d_irw"] = d_irw
 
         return df_test["d_irw"].values
