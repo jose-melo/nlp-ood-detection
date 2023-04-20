@@ -2,8 +2,6 @@ import argparse
 
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
-from sklearn.decomposition import PCA
 from tqdm import tqdm
 from transformers import (
     AutoConfig,
@@ -112,6 +110,10 @@ def main():
     model_name = args.model_name
     aggregations = args.aggregations
 
+    generate_latent_data(datasets_names, model_name, aggregations)
+
+
+def generate_latent_data(datasets_names, model_name, aggregations):
     for dataset_name in datasets_names:
         print(f"Dataset: {dataset_name}")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -156,25 +158,7 @@ def main():
                 axis=0,
             )
 
-        print("Plotting the last batch: ")
-
-        plt.style.use("seaborn-v0_8-whitegrid")
-        aggregation = aggregations[0]
-        pca = PCA(n_components=2)
-        transformed = pca.fit_transform(latent[aggregation])
-        plt.scatter(
-            transformed[:, 0],
-            transformed[:, 1],
-            label=f"Agg: {aggregation}",
-            c=batch["label"]
-            * (2 if aggregation == "mean" else 5 if aggregation == "last" else 1),
-            cmap="tab10",
-        )
-        plt.title(f"PCA: Latent representation - {model_name} dataset")
-        plt.legend()
-        plt.xlabel("PCA 1")
-        plt.ylabel("PCA 2")
-        plt.show()
+    return latent_data
 
 
 if __name__ == "__main__":

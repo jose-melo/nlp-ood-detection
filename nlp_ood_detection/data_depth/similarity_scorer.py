@@ -52,7 +52,7 @@ class Mahalanobis(SimilarityScorerBase):
         y_train: ndarray | None = None,
         model: Module | None = None,
         feature: ndarray | None = [0, 1],
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(x_train, y_train, model)
         self.feature = feature
@@ -70,8 +70,7 @@ class Mahalanobis(SimilarityScorerBase):
 
         labels = df_test["label"].unique()
         for label in labels:
-            x_test = df_test[
-                self.feature][df_test["label"] == label].values
+            x_test = df_test[self.feature][df_test["label"] == label].values
             x_train = df_train[self.feature][df_train["label"] == label].values
 
             x_test = x_test - np.mean(x_train, axis=0)
@@ -80,7 +79,10 @@ class Mahalanobis(SimilarityScorerBase):
 
             inv_cov = np.linalg.inv(cov)
 
-            mahalanobis = np.dot(x_test, inv_cov, )
+            mahalanobis = np.dot(
+                x_test,
+                inv_cov,
+            )
             mahalanobis = np.dot(mahalanobis, x_test.T)
             mahalanobis = np.diag(mahalanobis)
 
@@ -105,8 +107,7 @@ class MSP(SimilarityScorerBase):
     def score(self, x: ScorerInput) -> ndarray:
         self.x_test = x
         with torch.no_grad():
-            logits = self.model(self.x_train, self.y_train,
-                                self.x_test).cpu()
+            logits = self.model(self.x_train, self.y_train, self.x_test).cpu()
             prediction = softmax(logits, dim=1).argmax(dim=1)
             msp = 1 - prediction.numpy()
 
@@ -168,12 +169,15 @@ class IRW(SimilarityScorerBase):
         u /= np.linalg.norm(u, axis=0)
         return u
 
-    def score(self, x: ndarray) -> ndarray:
+    def score(self, x: ndarray, labels: ndarray | None) -> ndarray:
         df_test = pd.DataFrame(x)
-        with torch.no_grad():
-            logits = self.model(self.x_train, self.y_train, x).cpu()
-            prediction = softmax(logits, dim=1).argmax(axis=1).numpy()
-        df_test["label"] = prediction
+        if labels is None:
+            with torch.no_grad():
+                logits = self.model(self.x_train, self.y_train, x).cpu()
+                prediction = softmax(logits, dim=1).argmax(axis=1).numpy()
+            df_test["label"] = prediction
+        else:
+            df_test["label"] = labels
 
         df_train = pd.DataFrame(self.x_train)
         df_train["label"] = self.y_train
