@@ -6,6 +6,7 @@ __pycache__/
 lightning_logs/
 .vscode/
 testing.ipynb
+testing.py
 .mypy.ini
 
 # C extensions
