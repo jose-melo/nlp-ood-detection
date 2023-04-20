@@ -51,18 +51,42 @@ class Mahalanobis(SimilarityScorerBase):
         x_train: ndarray,
         y_train: ndarray | None = None,
         model: Module | None = None,
-        **kwargs,
+        feature: ndarray | None = [0, 1],
+        **kwargs
     ) -> None:
-        super().__init__(x_train, model)
+        super().__init__(x_train, y_train, model)
+        self.feature = feature
 
     def score(self, x: ScorerInput) -> ndarray:
-        self.x_test = x - np.mean(self.x_train, axis=0)
-        cov = np.cov(self.x_train, rowvar=False)
-        inv_cov = np.linalg.inv(cov)
-        mahalanobis = np.dot(self.x_test, inv_cov)
-        mahalanobis = np.dot(mahalanobis, self.x_test.T)
+        df_test = pd.DataFrame(x.reshape(-1, 2))
+        with torch.no_grad():
+            logits = self.model(self.x_train, self.y_train, x).cpu()
+            prediction = softmax(logits, dim=1).argmax(axis=1).numpy()
+        df_test["maha"] = np.zeros(df_test.shape[0])
+        df_test["label"] = prediction
 
-        return mahalanobis
+        df_train = pd.DataFrame(self.x_train)
+        df_train["label"] = self.y_train
+
+        labels = df_test["label"].unique()
+        for label in labels:
+            x_test = df_test[self.feature][df_test["label"] == label].values
+            x_train = df_train[self.feature][df_train["label"]
+                                             == label].values
+
+            x_test = x_test - np.mean(x_train, axis=0)
+
+            cov = np.cov(x_train, rowvar=False)
+
+            inv_cov = np.linalg.inv(cov)
+
+            mahalanobis = np.dot(x_test, inv_cov, )
+            mahalanobis = np.dot(mahalanobis, x_test.T)
+            mahalanobis = np.diag(mahalanobis)
+
+            df_test["maha"][df_test["label"] == label] = mahalanobis
+
+        return df_test["maha"].values
 
 
 class MSP(SimilarityScorerBase):
@@ -76,9 +100,6 @@ class MSP(SimilarityScorerBase):
         **kwargs,
     ) -> None:
         super().__init__(x_train, model)
-
-    def score(self, x: ScorerInput) -> ndarray:
-        self.x_test = x
 
         with torch.no_grad():
             logits = self.model(**self.x_test).cpu().numpy()
@@ -111,7 +132,7 @@ class EnergyBased(SimilarityScorerBase):
 
     def score(self, x: ScorerInput) -> ndarray:
         with torch.no_grad():
-            logits = self.model(self.x_train, self.y_train, **x).cpu()
+            logits = self.model(self.x_train, self.y_train, x).cpu()
             prediction = softmax(logits, dim=1).numpy()
             energy = self.__lse(prediction)
 
@@ -139,7 +160,7 @@ class IRW(SimilarityScorerBase):
     def __sample_sphere(self):
         """Sample from the unit sphere"""
         generator = np.random.Generator(np.random.PCG64())
-        u = generator.integers(self.num_dim, self.num_samples)
+        u = generator.standard_normal((self.num_dim, self.num_samples))
         u /= np.linalg.norm(u, axis=0)
         return u
 

@@ -5,7 +5,9 @@ from sklearn.datasets import load_iris
 
 from nlp_ood_detection.data_depth.similarity_scorer import (
     IRW,
+    MSP,
     EnergyBased,
+    Mahalanobis,
 )
 
 
@@ -46,6 +48,10 @@ def get_method(method: str, **kwargs) -> IRW:
         return IRW(**kwargs)
     if method == "energy":
         return EnergyBased(**kwargs)
+    if method == "msp":
+        return MSP(**kwargs)
+    if method == "maha":
+        return Mahalanobis(**kwargs)
     else:
         not_implemented = f"Method {method} not implemented yet!"
         raise NotImplementedError(not_implemented)
