@@ -1,9 +1,10 @@
 import argparse
-from matplotlib import pyplot as plt
 
+import numpy as np
 from numpy import ndarray
-from nlp_ood_detection.data_depth.utils import get_method
+import torch
 
+from nlp_ood_detection.data_depth.utils import get_method
 from nlp_ood_detection.data_processing.generate_data import LatentRepresentation
 
 
@@ -76,6 +77,7 @@ def main():
     args = vars(args)
 
     scores = generate_scores(**args)
+    print(scores)
 
 
 def generate_scores(
@@ -101,15 +103,26 @@ def generate_scores(
         for aggregation in aggregations:
             x_train = data[dataset][aggregation]["hidden_states"]
             y_train = data[dataset][aggregation]["label"]
+            logits = data[dataset][aggregation]["logits"]
+
+            # sample the data
+            generator = np.random.default_rng()
+            idx = generator.choice(len(x_train), size=1000, replace=False)
+            x_train = x_train[idx]
+            y_train = y_train[idx]
+            logits = logits[idx]
 
             params = {
                 "x_train": x_train,
                 "y_train": y_train,
+                "x": x_train,
+                "labels": y_train,
+                "logits": torch.Tensor(logits),
                 **kwargs,
             }
             scorer = get_method(method, **params)
 
-            score = scorer.score(x_train, y_train)
+            score = scorer.score(**params)
             scores[dataset][aggregation] = score
 
     return scores
