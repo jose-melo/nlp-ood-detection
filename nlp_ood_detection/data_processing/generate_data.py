@@ -1,7 +1,9 @@
 import argparse
+from matplotlib import pyplot as plt
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from tqdm import tqdm
 from transformers import (
     AutoConfig,
@@ -19,6 +21,7 @@ class LatentRepresentation:
         dataset_name: str,
         output_folder: str = ".",
         aggregations: list[str] = ["mean"],
+        n_classes: int = 2,
     ):
         self.model_name = model_name
         self.aggregations = aggregations
@@ -29,11 +32,15 @@ class LatentRepresentation:
         )
         self.output_folder = output_folder
         self.dataset_name = dataset_name
+        self.n_classes = n_classes
 
     def __call__(self, batch) -> dict[str, np.ndarray]:
         outputs = self.bert(batch["input_ids"], batch["attention_mask"])
 
-        agg = {}
+        agg = {
+            aggregation: {"hidden_states": [], "logits": [], "label": []}
+            for aggregation in self.aggregations
+        }
         for aggregation in self.aggregations:
             if aggregation == "mean":
                 latent_representation = np.array(
@@ -53,32 +60,63 @@ class LatentRepresentation:
                     axis=1,
                 )
 
-            agg[aggregation] = latent
-            filename = f"latent_{self.dataset_name}_{aggregation}.parquet"
-            latent = np.concatenate(
-                [latent, batch["label"].detach().numpy().reshape(-1, 1)],
+            logits = outputs["logits"].detach().numpy()
+            label = batch["label"].detach().numpy()
+            agg[aggregation]["hidden_states"] = latent
+            agg[aggregation]["logits"] = logits
+            agg[aggregation]["label"] = label
+            model_name = self.model_name.split("/")[-1]
+            filename = f"latent_{model_name}_{self.dataset_name}_{aggregation}"
+            data_to_save = np.concatenate(
+                [latent, logits, label.reshape(-1, 1)],
                 axis=1,
             )
-            self._save(filename, latent)
+            columns = (
+                [str(i) for i in range(latent.shape[1])]
+                + [f"logit_{i}" for i in range(logits.shape[1])]
+                + ["label"]
+            )
+            self._save(filename, data_to_save, columns)
 
         return agg
 
-    def _save(self, filename: str, latent: np.ndarray):
-        df = pd.DataFrame(latent)
-
-        # Set the columns
-        df.columns = [str(i) for i in range(latent.shape[1] - 1)] + ["label"]
-
-        # set the types
+    def _save(self, filename: str, data: np.ndarray, columns: list[str]):
+        df = pd.DataFrame(data)
+        df.columns = columns
         df.label = df.label.astype(int)
 
         parquet_params = {"compression": "gzip", "index": False, "engine": "pyarrow"}
         filename = f"{self.output_folder}/{filename}.parquet"
         df.to_parquet(filename, **parquet_params)
 
-    def load(self, path):
-        df = pd.read_parquet(path)
-        return df
+    @staticmethod
+    def load(
+        dataset_names: str,
+        aggregations: str,
+        output_folder: str,
+        model_name: str,
+    ):
+        data = {
+            dataset_name: {
+                aggregation: {"logits": None, "hidden_states": None, "label": None}
+                for aggregation in aggregations
+            }
+            for dataset_name in dataset_names
+        }
+        for dataset_name in dataset_names:
+            for aggregation in aggregations:
+                model_name = model_name.split("/")[-1]
+                filename = f"latent_{model_name}_{dataset_name}_{aggregation}.parquet"
+                path = f"{output_folder}/{filename}"
+                df = pd.read_parquet(path)
+                data[dataset_name][aggregation]["logits"] = df.filter(
+                    regex="logit",
+                ).values
+                data[dataset_name][aggregation]["hidden_states"] = df.filter(
+                    regex="^\\d+$",
+                ).values
+                data[dataset_name][aggregation]["label"] = df.label.values
+        return data
 
 
 def main():
@@ -138,7 +176,10 @@ def generate_latent_data(datasets_names, model_name, aggregations):
             aggregations=aggregations,
         )
 
-        latent_data = {aggregation: [] for aggregation in aggregations}
+        latent_data = {
+            aggregation: {"hidden_states": [], "logits": [], "label": []}
+            for aggregation in aggregations
+        }
         for idx, batch in enumerate(
             tqdm(
                 train_dataloader,
@@ -146,17 +187,19 @@ def generate_latent_data(datasets_names, model_name, aggregations):
                 total=len(train_dataloader),
             ),
         ):
-            latent = latent_generator(batch)
+            data = latent_generator(batch)
             for aggregation in aggregations:
-                latent_data[aggregation].append(latent[aggregation])
+                for key in latent_data[aggregation].keys():
+                    latent_data[aggregation][key].append(data[aggregation][key])
             if idx == 2:
                 break
 
         for aggregation in aggregations:
-            latent_data[aggregation] = np.concatenate(
-                latent_data[aggregation],
-                axis=0,
-            )
+            for key in latent_data[aggregation].keys():
+                latent_data[aggregation][key] = np.concatenate(
+                    latent_data[aggregation][key],
+                    axis=0,
+                )
 
     return latent_data
 
