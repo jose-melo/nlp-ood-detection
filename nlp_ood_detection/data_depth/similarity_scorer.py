@@ -7,6 +7,7 @@ import torch
 from numpy import ndarray
 from torch.nn import Module
 from torch.nn.functional import softmax
+from typing import Union
 
 
 class ScorerInput(TypedDict):
@@ -23,9 +24,9 @@ class SimilarityScorerBase(ABC):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: ndarray | None = None,
-        model: Module | None = None,
-        features: ndarray | None = None,
+        y_train: Union[ndarray, None] = None,
+        model: Union[Module, None] = None,
+        features: Union[ndarray, None] = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -49,9 +50,9 @@ class Mahalanobis(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: ndarray | None = None,
-        model: Module | None = None,
-        feature: ndarray | None = [0, 1],
+        y_train: Union[ndarray, None] = None,
+        model: Union[Module, None] = None,
+        feature: Union[ndarray, None] = [0, 1],
         **kwargs
     ) -> None:
         super().__init__(x_train, y_train, model)
@@ -96,8 +97,8 @@ class MSP(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: ndarray | None = None,
-        model: Module | None = None,
+        y_train: Union[ndarray, None] = None,
+        model: Union[Module, None] = None,
         **kwargs,
     ) -> None:
         super().__init__(x_train, y_train, model)
@@ -119,8 +120,8 @@ class EnergyBased(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: ndarray | None = None,
-        model: Module | None = None,
+        y_train: Union[ndarray, None] = None,
+        model: Union[Module, None] = None,
         temperature: float = 1,
         use_logits: bool = False,
         **kwargs,
@@ -149,11 +150,11 @@ class IRW(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: ndarray | None = None,
-        model: Module | None = None,
+        y_train: Union[ndarray, None] = None,
+        model: Union[Module, None] = None,
         num_dim: int = 2,
         num_samples: int = 1000,
-        feature: list | None = [0, 1],
+        feature: Union[list, None] = [0, 1],
         **kwargs,
     ):
         super().__init__(x_train, y_train, model, feature)

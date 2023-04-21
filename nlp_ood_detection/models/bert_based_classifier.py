@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+from typing import Dict
 
 import pytorch_lightning as pl
 import torch
@@ -73,7 +74,7 @@ class BertBasedClassifier(pl.LightningModule):
                 0], "epoch": self.current_epoch},
         )
 
-    def calculate_loss(self, batch: dict[str, torch.Tensor], mode):
+    def calculate_loss(self, batch: Dict[str, torch.Tensor], mode):
         batch = {key: value.to(self.device) for key, value in batch.items()}
 
         labels = batch["label"]

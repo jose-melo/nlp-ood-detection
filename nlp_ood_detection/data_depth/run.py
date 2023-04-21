@@ -7,7 +7,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.svm import SVC
 from torch import Tensor
 
-from nlp_ood_detection.data_depth.utils import get_method, load_data
+from utils import get_method, load_data # nlp_ood_detection.data_depth.
 
 
 class BasicClassifier(ClassifierMixin, BaseEstimator):

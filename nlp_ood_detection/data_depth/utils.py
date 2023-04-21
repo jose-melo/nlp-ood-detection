@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 from numpy import ndarray
 from sklearn.datasets import load_iris
+from typing import Tuple
 
-from nlp_ood_detection.data_depth.similarity_scorer import (
+from similarity_scorer import ( # nlp_ood_detection.data_depth.
     IRW,
     MSP,
     EnergyBased,
@@ -17,7 +18,7 @@ def load_data(
     y_min: float = 0,
     y_max: float = 3,
     grid_size: int = 5,
-) -> tuple[ndarray, ndarray, ndarray, ndarray, ndarray]:
+) -> Tuple[ndarray, ndarray, ndarray, ndarray, ndarray]:
     """Load Iris dataset
 
     Returns:

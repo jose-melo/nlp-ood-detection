@@ -2,13 +2,14 @@ import numpy as np
 from datasets import Dataset, load_dataset
 from sklearn.model_selection import train_test_split
 from transformers import PreTrainedTokenizer
+from typing import List, Dict
 
 
 class DataPreprocessing:
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer,
-        dataset_list: list[str] = ["imdb"],
+        dataset_list: List[str] = ["imdb"],
     ):
         self.dataset_list: list[str] = dataset_list
         self.datasets: dict[str, dict[str, Dataset]] = {}
@@ -17,7 +18,7 @@ class DataPreprocessing:
         for dataset in self.dataset_list:
             self.datasets[dataset] = self.__load_data(dataset)
 
-    def __preprocess(self, dataset: dict[str, Dataset]) -> Dataset:
+    def __preprocess(self, dataset: Dict[str, Dataset]) -> Dataset:
         print("Dataset preprocessing...")
 
         for split in dataset.keys():
