@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TypedDict
+from typing import TypedDict, Union
 
 import numpy as np
 import pandas as pd
@@ -7,15 +7,6 @@ import torch
 from numpy import ndarray
 from torch.nn import Module
 from torch.nn.functional import softmax
-from typing import Union
-
-
-class ScorerInput(TypedDict):
-    """TypedDict for the input of the similarity scorer classes"""
-
-    x_test: ndarray
-    # x_train: NotRequired[ndarray]
-    # y_train: NotRequired[ndarray]
 
 
 class SimilarityScorerBase(ABC):
@@ -24,9 +15,9 @@ class SimilarityScorerBase(ABC):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: Union[ndarray, None] = None,
-        model: Union[Module, None] = None,
-        features: Union[ndarray, None] = None,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        features: ndarray | None = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -37,9 +28,9 @@ class SimilarityScorerBase(ABC):
         self.features = features
 
     @abstractmethod
-    def score(self, x: ScorerInput) -> ndarray:
+    def score(self, x: ndarray, **kwargs) -> ndarray:
         """Calculate the similarity score
-        :params: X (ScorerInput): input value
+        :params: X (ndarray): input value
         :return: ndarray: the similarity score
         """
 
@@ -50,15 +41,15 @@ class Mahalanobis(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: Union[ndarray, None] = None,
-        model: Union[Module, None] = None,
-        feature: Union[ndarray, None] = [0, 1],
+        y_train: ndarray | None = None,
+        model: Module | None = None,
+        feature: ndarray | None = [0, 1],
         **kwargs,
     ) -> None:
         super().__init__(x_train, y_train, model)
         self.feature = feature
 
-    def score(self, x: ScorerInput) -> ndarray:
+    def score(self, x: ndarray, logits: ndarray, **kwargs) -> ndarray:
         df_test = pd.DataFrame(x.reshape(-1, 2))
         with torch.no_grad():
             logits = self.model(self.x_train, self.y_train, x).cpu()
@@ -99,18 +90,21 @@ class MSP(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: Union[ndarray, None] = None,
-        model: Union[Module, None] = None,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
         **kwargs,
     ) -> None:
         super().__init__(x_train, y_train, model)
 
-    def score(self, x: ScorerInput) -> ndarray:
+    def score(self, x: ndarray, logits: ndarray, **kwargs) -> ndarray:
         self.x_test = x
-        with torch.no_grad():
-            logits = self.model(self.x_train, self.y_train, self.x_test).cpu()
-            prediction = softmax(logits, dim=1).argmax(dim=1)
-            msp = 1 - prediction.numpy()
+        if logits is None:
+            with torch.no_grad():
+                logits = self.model(self.x_train, self.y_train, self.x_test).cpu()
+
+        prediction = softmax(logits, dim=1)
+        prediction = prediction.max(axis=1).values
+        msp = 1 - prediction.numpy()
 
         return msp
 
@@ -121,8 +115,8 @@ class EnergyBased(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: Union[ndarray, None] = None,
-        model: Union[Module, None] = None,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
         temperature: float = 1,
         use_logits: bool = False,
         **kwargs,
@@ -136,11 +130,13 @@ class EnergyBased(SimilarityScorerBase):
         """Implementation of the log-sum-exp function"""
         return -self.T * np.log(np.sum(np.exp(x / self.T), axis=1))
 
-    def score(self, x: ScorerInput) -> ndarray:
-        with torch.no_grad():
-            logits = self.model(self.x_train, self.y_train, x).cpu()
-            prediction = softmax(logits, dim=1).numpy()
-            energy = self.__lse(prediction)
+    def score(self, x: ndarray, logits: ndarray, **kwargs) -> ndarray:
+        if logits is None:
+            with torch.no_grad():
+                logits = self.model(self.x_train, self.y_train, x).cpu()
+
+        prediction = softmax(logits, dim=1).numpy()
+        energy = self.__lse(prediction)
 
         return energy
 
@@ -151,11 +147,11 @@ class IRW(SimilarityScorerBase):
     def __init__(
         self,
         x_train: ndarray,
-        y_train: Union[ndarray, None] = None,
-        model: Union[Module, None] = None,
+        y_train: ndarray | None = None,
+        model: Module | None = None,
         num_dim: int = 2,
         num_samples: int = 1000,
-        feature: Union[list, None] = [0, 1],
+        feature: list | None = [0, 1],
         **kwargs,
     ):
         super().__init__(x_train, y_train, model, feature)
@@ -170,7 +166,7 @@ class IRW(SimilarityScorerBase):
         u /= np.linalg.norm(u, axis=0)
         return u
 
-    def score(self, x: ndarray, labels: ndarray | None) -> ndarray:
+    def score(self, x: ndarray, labels: ndarray | None, **kwargs) -> ndarray:
         df_test = pd.DataFrame(x)
         if labels is None:
             with torch.no_grad():
