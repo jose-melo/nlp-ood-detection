@@ -1,5 +1,6 @@
 import argparse
 import copy
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -72,7 +73,7 @@ class LatentRepresentation:
                 )
 
             logits = outputs["logits"].detach().cpu().numpy()
-            label = batch["label"].detach().cpu().numpy()
+            label = outputs["logits"].detach().cpu().numpy().argmax(axis=1)
             agg[aggregation]["hidden_states"] = latent
             agg[aggregation]["logits"] = logits
             agg[aggregation]["label"] = label
@@ -85,7 +86,8 @@ class LatentRepresentation:
             for aggregation in self.aggregations:
                 if len(data[dataset_name][aggregation]["hidden_states"]) == 0:
                     continue
-                filename = f"latent_{model_name}_{dataset_name}_{aggregation}"
+                _dataset_name = dataset_name.replace("/", "_")
+                filename = f"latent_{model_name}_{_dataset_name}_{aggregation}"
                 latent = data[dataset_name][aggregation]["hidden_states"]
                 logits = data[dataset_name][aggregation]["logits"]
                 labels = data[dataset_name][aggregation]["label"].reshape(-1, 1)
@@ -130,7 +132,8 @@ class LatentRepresentation:
         for dataset_name in dataset_names:
             for aggregation in aggregations:
                 model_name = model_name.split("/")[-1]
-                filename = f"latent_{model_name}_{dataset_name}_{aggregation}.parquet"
+                _dataset_name = dataset_name.replace("/", "_")
+                filename = f"latent_{model_name}_{_dataset_name}_{aggregation}.parquet"
                 path = f"{output_folder}/{filename}"
                 df = pd.read_parquet(path)
                 data[dataset_name][aggregation]["logits"] = df.filter(
@@ -153,6 +156,13 @@ def main():
     )
 
     parser.add_argument(
+        "--early_stopping",
+        help="Indicate when to stop the script",
+        default=250,
+        type=int,
+    )
+
+    parser.add_argument(
         "--aggregations",
         nargs="+",
         help="A list of aggregations to use",
@@ -171,11 +181,17 @@ def main():
     datasets_names = args.datasets
     model_name = args.model_name
     aggregations = args.aggregations
+    early_stopping = args.early_stopping
 
-    generate_latent_data(datasets_names, model_name, aggregations)
+    generate_latent_data(datasets_names, model_name, aggregations, early_stopping)
 
 
-def generate_latent_data(dataset_names, model_name, aggregations):
+def generate_latent_data(
+    dataset_names: list[str],
+    model_name: str,
+    aggregations: list[str],
+    early_stopping: int,
+):
     latent_data = {
         dataset: {
             aggregation: {"hidden_states": [], "logits": [], "label": []}
@@ -206,21 +222,24 @@ def generate_latent_data(dataset_names, model_name, aggregations):
         }
         dataloader = BertBasedDataModule(**params)
         dataloader.setup()
-        test_dataloader = dataloader.test_dataloader()
+        train_dataloader = dataloader.train_dataloader()
 
         for idx, batch in enumerate(
             tqdm(
-                test_dataloader,
+                train_dataloader,
                 desc="Latent calculation",
-                total=len(test_dataloader),
+                total=min(early_stopping, len(train_dataloader)),
             ),
         ):
+            if idx == early_stopping:
+                break
             data = latent_generator(batch)
             for aggregation in aggregations:
                 for key in latent_data[dataset_name][aggregation].keys():
                     latent_data[dataset_name][aggregation][key].append(
                         data[aggregation][key],
                     )
+
             if idx % 1000 == 0:
                 backup = copy.deepcopy(latent_data)
                 for aggregation in aggregations:

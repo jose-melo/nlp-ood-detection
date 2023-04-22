@@ -9,6 +9,21 @@ class DataPreprocessing:
     dataset2key = {
         "imdb": "text",
         "sst2": "sentence",
+        "trec": "text",
+        "argilla/news-summary": "text",
+        "race": "article",
+        "yelp_review_full": "text",
+        "paws": "sentence1",
+    }
+
+    dataset2args = {
+        "imdb": {},
+        "sst2": {},
+        "trec": {},
+        "argilla/news-summary": {},
+        "race": {"name": "all"},
+        "yelp_review_full": {},
+        "paws": {"name": "labeled_final"},
     }
 
     def __init__(
@@ -21,7 +36,10 @@ class DataPreprocessing:
         self.tokenizer = tokenizer
 
         for dataset in self.dataset_list:
-            self.datasets[dataset] = self.__load_data(dataset)
+            self.datasets[dataset] = self.__load_data(
+                dataset,
+                **DataPreprocessing.dataset2args[dataset],
+            )
 
     def __preprocess(self, dataset: Dict[str, Dataset], dataset_name: str) -> Dataset:
         print("Dataset preprocessing...")
@@ -38,13 +56,13 @@ class DataPreprocessing:
             )
             dataset[split].set_format(
                 type="torch",
-                columns=["input_ids", "attention_mask", "label"],
+                columns=["input_ids", "attention_mask"],
             )
         return dataset
 
-    def __load_data(self, dataset_name: str) -> Dataset:
+    def __load_data(self, dataset_name: str, **load_args) -> Dataset:
         print(f"Loading {dataset_name} dataset...")
-        dataset = load_dataset(dataset_name)
+        dataset = load_dataset(dataset_name, **load_args)
 
         split_train_val = np.arange(len(dataset["train"]))
         generator = np.random.default_rng()

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from numpy import ndarray
 from sklearn.datasets import load_iris
+from nlp_ood_detection.aiirw import AIIRW
 
 from nlp_ood_detection.data_depth.similarity_scorer import (
     IRW,
@@ -52,6 +53,8 @@ def get_method(method: str, **kwargs) -> IRW:
         return MSP(**kwargs)
     if method == "maha":
         return Mahalanobis(**kwargs)
+    if method == "aiirw":
+        return AIIRW(**kwargs)
     else:
         not_implemented = f"Method {method} not implemented yet!"
         raise NotImplementedError(not_implemented)
