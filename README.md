@@ -1,4 +1,4 @@
-# Outlier Detection for NLP using Latent Representations
+# Reliable AI through Out-of-Distribution Detection: A Benchmark Study
 
 
 ![GitHub](https://img.shields.io/github/license/jose-melo/nlp-ood-detection) ![Lines of code](https://img.shields.io/tokei/lines/github/jose-melo/nlp-ood-detection)
