@@ -49,39 +49,24 @@ class Mahalanobis(SimilarityScorerBase):
         super().__init__(x_train, y_train, model)
         self.feature = feature
 
-    def score(self, x: ndarray, logits: ndarray, **kwargs) -> ndarray:
-        df_test = pd.DataFrame(x.reshape(-1, 2))
-        with torch.no_grad():
-            logits = self.model(self.x_train, self.y_train, x).cpu()
-            prediction = softmax(logits, dim=1).argmax(axis=1).numpy()
-        df_test["maha"] = np.zeros(df_test.shape[0])
-        df_test["label"] = prediction
+    def score(self, x: ndarray, **kwargs) -> ndarray:
+        x_test = x
+        x_train = self.x_train
 
-        df_train = pd.DataFrame(self.x_train)
-        df_train["label"] = self.y_train
+        x_test = x_test - np.mean(x_train, axis=0)
 
-        labels = df_test["label"].unique()
-        for label in labels:
-            x_test = df_test[self.feature][df_test["label"] == label].values
-            x_train = df_train[self.feature][df_train["label"] == label].values
+        cov = np.cov(x_train, rowvar=False)
 
-            x_test = x_test - np.mean(x_train, axis=0)
+        inv_cov = np.linalg.inv(cov)
 
-            cov = np.cov(x_train, rowvar=False)
+        mahalanobis = np.dot(
+            x_test,
+            inv_cov,
+        )
+        mahalanobis = np.dot(mahalanobis, x_test.T)
+        mahalanobis = np.diag(mahalanobis)
 
-            inv_cov = np.linalg.inv(cov)
-
-            mahalanobis = np.dot(
-                x_test,
-                inv_cov,
-            )
-            mahalanobis = np.dot(mahalanobis, x_test.T)
-            mahalanobis = np.diag(mahalanobis)
-
-            # Solve pandas error when assigning values to a slice
-            df_test.loc[df_test["label"] == label, "maha"] = mahalanobis
-
-        return df_test["maha"].values
+        return mahalanobis
 
 
 class MSP(SimilarityScorerBase):
@@ -166,47 +151,31 @@ class IRW(SimilarityScorerBase):
         u /= np.linalg.norm(u, axis=0)
         return u
 
-    def score(self, x: ndarray, labels: ndarray | None, **kwargs) -> ndarray:
-        df_test = pd.DataFrame(x)
-        if labels is None:
-            with torch.no_grad():
-                logits = self.model(self.x_train, self.y_train, x).cpu()
-                prediction = softmax(logits, dim=1).argmax(axis=1).numpy()
-            df_test["label"] = prediction
-        else:
-            df_test["label"] = labels
+    def score(self, x: ndarray, **kwargs) -> ndarray:
+        x_test = x
+        x_train = self.x_train
 
-        df_train = pd.DataFrame(self.x_train)
-        df_train["label"] = self.y_train
+        sampled_points = self.__sample_sphere()
 
-        labels = df_test["label"].unique()
-        df_test["d_irw"] = np.zeros(df_test.shape[0])
-        for label in labels:
-            x_test = df_test[self.feature][df_test["label"] == label].values
-            x_train = df_train[self.feature][df_train["label"] == label].values
+        ranking = np.zeros((x_test.shape[0], self.num_samples))
 
-            sampled_points = self.__sample_sphere()
+        x_train_proj = x_train @ sampled_points
 
-            ranking = np.zeros((x_test.shape[0], self.num_samples))
+        x_test_proj = x_test @ sampled_points
 
-            x_train_proj = x_train @ sampled_points
+        x_train_proj.sort(axis=0)
+        for i in range(x_test.shape[0]):
+            for j in range(self.num_samples):
+                ranking[i, j] = np.argmin(
+                    abs(x_train_proj[:, j] - x_test_proj[i, j]),
+                )
 
-            x_test_proj = x_test @ sampled_points
+        d_irw = ranking / len(self.x_train)
 
-            x_train_proj.sort(axis=0)
-            for i in range(x_test.shape[0]):
-                for j in range(self.num_samples):
-                    ranking[i, j] = np.argmin(
-                        abs(x_train_proj[:, j] - x_test_proj[i, j]),
-                    )
+        for i, point in enumerate(d_irw):
+            for j, sample in enumerate(point):
+                d_irw[i, j] = min(sample, 1 - sample)
 
-            d_irw = ranking / len(self.x_train)
+        d_irw = np.mean(d_irw, axis=1)
 
-            for i, point in enumerate(d_irw):
-                for j, sample in enumerate(point):
-                    d_irw[i, j] = min(sample, 1 - sample)
-
-            d_irw = np.mean(d_irw, axis=1)
-            df_test.loc[df_test["label"] == label, "d_irw"] = d_irw
-
-        return df_test["d_irw"].values
+        return d_irw
