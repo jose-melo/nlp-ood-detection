@@ -3,8 +3,7 @@
 
 ![GitHub](https://img.shields.io/github/license/jose-melo/nlp-ood-detection) ![Lines of code](https://img.shields.io/tokei/lines/github/jose-melo/nlp-ood-detection)
 
-Welcome to our open-source project on out-of-distribution (OOD) detection with machine learning models! This project aims to compare different methods for OOD detection and provide a benchmark using popular datasets. We also provide open-source code and data to facilitate future experiments in this field.
-
+Welcome to our open-source project on out-of-distribution (OOD) detection with machine learning models! This project aims to compare different methods for OOD detection and provide a benchmark using popular datasets. We also provide open-source code and data to facilitate future experiments in this field. The full paper can be found here: <a href="https://openreview.net/forum?id=0Q9lmUuYGGs" >Reliable AI through Out-of-Distribution Detection: A Benchmark Study</a>
 ## Introduction
 
 Machine learning models are known to perform well on data that is close to the train set distribution. However, when they are used on OOD data, they have a high risk of making incorrect predictions, and sometimes they even give high confidence scores to these wrong predictions. This can be a major issue in real-world applications where we need reliable AI. Therefore, it is important to be able to flag OOD cases, so the human user knows that further expertise is required.
